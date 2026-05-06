@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""A simple CLI todo list stored in a JSON file."""
+"""Interactive CLI todo list stored in a JSON file."""
 
-import argparse
 import json
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -20,100 +18,103 @@ def save(todos: list[dict]) -> None:
     TODO_FILE.write_text(json.dumps(todos, indent=2))
 
 
-def cmd_add(args) -> None:
-    todos = load()
-    todos.append({
-        "id": (max(t["id"] for t in todos) + 1) if todos else 1,
-        "task": args.task,
-        "done": False,
-        "created": datetime.now().strftime("%Y-%m-%d %H:%M"),
-    })
-    save(todos)
-    print(f"Added: {args.task}")
+def next_id(todos: list[dict]) -> int:
+    return (max(t["id"] for t in todos) + 1) if todos else 1
 
 
-def cmd_list(args) -> None:
-    todos = load()
-    if not todos:
-        print("No tasks yet. Add one with: python todo.py add \"your task\"")
+def show(todos: list[dict], show_all: bool = False) -> None:
+    items = todos if show_all else [t for t in todos if not t["done"]]
+    if not items:
+        print("  (no tasks)" if show_all else "  (nothing pending)")
         return
-
-    if args.all:
-        items = todos
-    else:
-        items = [t for t in todos if not t["done"]]
-        if not items:
-            print("All tasks are done!")
-            return
-
     for t in items:
         status = "x" if t["done"] else " "
         print(f"  [{status}] {t['id']:>3}.  {t['task']}")
 
 
-def cmd_done(args) -> None:
-    todos = load()
-    for t in todos:
-        if t["id"] == args.id:
-            t["done"] = True
-            save(todos)
-            print(f"Done: {t['task']}")
-            return
-    print(f"No task with id {args.id}.")
-    sys.exit(1)
-
-
-def cmd_delete(args) -> None:
-    todos = load()
-    remaining = [t for t in todos if t["id"] != args.id]
-    if len(remaining) == len(todos):
-        print(f"No task with id {args.id}.")
-        sys.exit(1)
-    removed = next(t for t in todos if t["id"] == args.id)
-    save(remaining)
-    print(f"Deleted: {removed['task']}")
-
-
-def cmd_clear(args) -> None:
-    todos = load()
-    remaining = [t for t in todos if not t["done"]]
-    removed = len(todos) - len(remaining)
-    save(remaining)
-    print(f"Cleared {removed} completed task(s).")
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Simple CLI todo list.")
-    sub = parser.add_subparsers(dest="command")
+    print("=== Todo List ===")
+    print("Type 'help' to see commands.\n")
 
-    add_p = sub.add_parser("add", help="Add a new task")
-    add_p.add_argument("task", help="Task description")
+    while True:
+        todos = load()
+        show(todos)
 
-    list_p = sub.add_parser("list", help="List tasks")
-    list_p.add_argument("--all", action="store_true", help="Include completed tasks")
+        try:
+            cmd = input("\n> ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            print("\nBye!")
+            break
 
-    done_p = sub.add_parser("done", help="Mark a task as complete")
-    done_p.add_argument("id", type=int, help="Task ID")
+        if cmd in ("quit", "exit", "q"):
+            print("Bye!")
+            break
 
-    del_p = sub.add_parser("delete", help="Delete a task")
-    del_p.add_argument("id", type=int, help="Task ID")
+        elif cmd == "help":
+            print("""
+  add           Add a new task
+  done <id>     Mark a task as complete
+  delete <id>   Delete a task
+  all           Show all tasks including completed
+  clear         Remove all completed tasks
+  quit          Exit
+""")
 
-    sub.add_parser("clear", help="Remove all completed tasks")
+        elif cmd == "add":
+            task = input("  Task: ").strip()
+            if task:
+                todos.append({
+                    "id": next_id(todos),
+                    "task": task,
+                    "done": False,
+                    "created": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                })
+                save(todos)
+                print(f"  Added: {task}")
 
-    args = parser.parse_args()
+        elif cmd.startswith("done"):
+            parts = cmd.split()
+            if len(parts) == 2 and parts[1].isdigit():
+                tid = int(parts[1])
+                for t in todos:
+                    if t["id"] == tid:
+                        t["done"] = True
+                        save(todos)
+                        print(f"  Done: {t['task']}")
+                        break
+                else:
+                    print(f"  No task with id {tid}.")
+            else:
+                print("  Usage: done <id>")
 
-    commands = {
-        "add": cmd_add,
-        "list": cmd_list,
-        "done": cmd_done,
-        "delete": cmd_delete,
-        "clear": cmd_clear,
-    }
+        elif cmd.startswith("delete"):
+            parts = cmd.split()
+            if len(parts) == 2 and parts[1].isdigit():
+                tid = int(parts[1])
+                remaining = [t for t in todos if t["id"] != tid]
+                if len(remaining) == len(todos):
+                    print(f"  No task with id {tid}.")
+                else:
+                    removed = next(t for t in todos if t["id"] == tid)
+                    save(remaining)
+                    print(f"  Deleted: {removed['task']}")
+            else:
+                print("  Usage: delete <id>")
 
-    if args.command in commands:
-        commands[args.command](args)
-    else:
-        parser.print_help()
+        elif cmd == "all":
+            show(todos, show_all=True)
+
+        elif cmd == "clear":
+            remaining = [t for t in todos if not t["done"]]
+            removed = len(todos) - len(remaining)
+            save(remaining)
+            print(f"  Cleared {removed} completed task(s).")
+
+        elif cmd == "":
+            continue
+
+        else:
+            print(f"  Unknown command: '{cmd}'. Type 'help' for options.")
 
 
 if __name__ == "__main__":
