@@ -25,8 +25,11 @@ def get_category(suffix: str) -> str:
     return "Other"
 
 
+SCRIPT = Path(__file__).resolve()
+
+
 def organize(directory: Path, dry_run: bool) -> None:
-    files = [f for f in directory.iterdir() if f.is_file()]
+    files = [f for f in directory.iterdir() if f.is_file() and f.resolve() != SCRIPT]
 
     if not files:
         print("No files found.")
